@@ -11,35 +11,67 @@
 #' codetitle(data, strlength = 3)
 #' @export
 
-codevar <- function(data, strlength, tag = NULL) {
+codevar <- function(data) {
   # Input validation
   if (!is.data.frame(data)) {
     stop("Input data must be a dataframe.")
   }
-  if (!is.numeric(strlength) || strlength <= 0) {
-    stop("strlength must be a positive numeric value.")
-  }
 
-  # Simplify transformation of column names
+  # Load required packages
+  if (!requireNamespace("tm", quietly = TRUE)) install.packages("tm")
+  if (!requireNamespace("SnowballC", quietly = TRUE)) install.packages("SnowballC")
+  library(tm)
+  library(SnowballC)
+
+  # Function to process and shorten column names using NLP
   transform_name <- function(name) {
-    new_name <- tolower(gsub(" ", "", substr(name, 1, strlength)))
-    if (!is.null(tag)) {
-      new_name <- paste0(new_name, tag)
+    # Convert to lowercase
+    name <- tolower(name)
+
+    # Create a text corpus
+    corpus <- VCorpus(VectorSource(name))
+
+    # Text cleaning
+    corpus <- tm_map(corpus, removePunctuation)
+    # Do not remove numbers to retain significant numeric identifiers
+    # corpus <- tm_map(corpus, removeNumbers)
+    corpus <- tm_map(corpus, removeWords, stopwords("english"))
+    corpus <- tm_map(corpus, stripWhitespace)
+    corpus <- tm_map(corpus, stemDocument, language = "english")
+
+    # Extract the processed text
+    processed_name <- sapply(corpus, as.character)
+
+    # Split into words
+    words <- unlist(strsplit(processed_name, "\\s+"))
+
+    # If no words left after processing, fallback to abbreviation
+    if (length(words) == 0 || all(words == "")) {
+      words <- substr(gsub("\\s+", "", name), 1, 3)
     }
+
+    # Combine words to form the new name
+    new_name <- paste(words, collapse = "_")
+
+    # Ensure syntactic validity
+    new_name <- make.names(new_name)
+
     return(new_name)
   }
 
-  # Apply transformation and handle duplicates
+  # Apply the transformation to all column names
   new_names <- sapply(colnames(data), transform_name)
-  new_names <- make.unique(new_names)
 
-  # Create coderef dataframe
+  # Ensure uniqueness of new names after transformation
+  new_names <- make.names(new_names, unique = TRUE)
+
+  # Create a reference dataframe
   coderef <- data.frame(Original = colnames(data), Coded = new_names, stringsAsFactors = FALSE)
 
   # Set new column names to the dataframe
   colnames(data) <- new_names
 
-  # Return modified dataframe and coderef
+  # Return the modified dataframe and the reference
   return(list(data = data, coderef = coderef))
 }
 
@@ -49,6 +81,8 @@ codevar <- function(data, strlength, tag = NULL) {
 getwd()
 library(here)
 data <- read.csv(here("data", "covariates.csv"))
-result <- codevar(data, strlength = 3)
+data <- read.csv(here("data", "df.csv"))
+result <- codevar(data)
 new_data <- result$data
+new_data
 coderef <- result$coderef
