@@ -11,10 +11,21 @@
 #' codetitle(data, strlength = 3)
 #' @export
 
-codevar <- function(data) {
+
+codevar <- function(data, columns = NULL) {
   # Input validation
   if (!is.data.frame(data)) {
     stop("Input data must be a dataframe.")
+  }
+
+  # Validate and resolve column selection
+  if (is.null(columns)) {
+    columns <- seq_along(data)  # Default to all columns
+  } else {
+    # Ensure specified columns are valid indices
+    if (!all(columns %in% seq_along(data))) {
+      stop("Some specified columns are not valid indices in the dataframe.")
+    }
   }
 
   # Load required packages
@@ -33,8 +44,6 @@ codevar <- function(data) {
 
     # Text cleaning
     corpus <- tm_map(corpus, removePunctuation)
-    # Do not remove numbers to retain significant numeric identifiers
-    # corpus <- tm_map(corpus, removeNumbers)
     corpus <- tm_map(corpus, removeWords, stopwords("english"))
     corpus <- tm_map(corpus, stripWhitespace)
     corpus <- tm_map(corpus, stemDocument, language = "english")
@@ -59,14 +68,20 @@ codevar <- function(data) {
     return(new_name)
   }
 
-  # Apply the transformation to all column names
-  new_names <- sapply(colnames(data), transform_name)
+  # Process selected columns
+  original_names <- colnames(data)
+  new_names <- original_names  # Keep original names for unselected columns
+  selected_names <- original_names[columns]
+  transformed_names <- sapply(selected_names, transform_name)
+
+  # Replace selected columns' names with transformed names
+  new_names[columns] <- transformed_names
 
   # Ensure uniqueness of new names after transformation
   new_names <- make.names(new_names, unique = TRUE)
 
   # Create a reference dataframe
-  coderef <- data.frame(Original = colnames(data), Coded = new_names, stringsAsFactors = FALSE)
+  coderef <- data.frame(Original = original_names, Coded = new_names, stringsAsFactors = FALSE)
 
   # Set new column names to the dataframe
   colnames(data) <- new_names
@@ -75,9 +90,7 @@ codevar <- function(data) {
   return(list(data = data, coderef = coderef))
 }
 
-
 # Example usage:
-
 getwd()
 library(here)
 data <- read.csv(here("data", "covariates.csv"))
@@ -86,3 +99,4 @@ result <- codevar(data)
 new_data <- result$data
 new_data
 coderef <- result$coderef
+
